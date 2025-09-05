@@ -311,10 +311,19 @@ socketio = SocketIO(
     cors_allowed_origins=["*"],
     ping_timeout=60,
     ping_interval=25,
-    async_mode='threading'  # Use threading for Railway compatibility
+    async_mode=None  # Use standard mode for Railway compatibility
 )
 
-translator = SpeechTranslator()  # Now uses only Gemini 2.5 Flash for everything
+# Global translator instance
+translator = None
+
+try:
+    translator = SpeechTranslator()  # Now uses only Gemini 2.5 Flash for everything
+    print("🎙️ SpeechTranslator initialized successfully")
+except Exception as e:
+    print(f"⚠️ SpeechTranslator initialization failed: {e}")
+    print("🚨 This might cause API-related features to fail")
+    translator = None
 
 @app.route('/')
 def index():
@@ -322,6 +331,17 @@ def index():
 
 @app.route('/status')
 def get_status():
+    if translator is None:
+        return jsonify({
+            'status': 'running',
+            'models_loaded': {
+                'gemini': 'not_initialized',
+                'elevenlabs': 'not_initialized'
+            },
+            'cache_size': 0,
+            'initialization_error': True
+        })
+
     return jsonify({
         'status': 'running',
         'models_loaded': {
@@ -350,6 +370,11 @@ def handle_start_streaming():
 def handle_audio_chunk(data):
     """Handle real-time audio chunks from WebSocket client"""
     try:
+        # Check if translator is available
+        if translator is None:
+            emit('error', {'message': 'Translator not initialized. Check API keys.'})
+            return
+
         # Decode the base64 audio data
         if 'audio' in data:
             audio_bytes = base64.b64decode(data['audio'])
@@ -386,6 +411,13 @@ def handle_stop_streaming():
 @app.route('/translate', methods=['POST'])
 def translate_audio():
     try:
+        # Check if translator is initialized
+        if translator is None:
+            return jsonify({
+                'error': 'Translator not initialized. App is starting up.',
+                'initialization_error': True
+            }), 503
+
         # Get audio data from request (raw float32 buffer)
         audio_data = request.data
 

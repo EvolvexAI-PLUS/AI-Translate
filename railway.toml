@@ -3,9 +3,10 @@ builder = "NIXPACKS"
 
 [deploy]
 startCommand = "python wsgi.py"
-healthcheckPath = "/status"
-restartPolicyTimeout = 300
-restartPolicyMaxRetries = 10
+healthcheckPath = "/health"
+restartPolicyType = "ON_FAILURE"
+healthcheckTimeout = 10
+restartPolicyMaxRetries = 5
 
 [env]
 FLASK_ENV = "production"
