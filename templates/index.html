@@ -914,15 +914,19 @@
                         const samples = inputBuffer.getChannelData(0);
                         recordedSamples.push(...Array.from(samples));
                     } else if (currentMode === 'streaming') {
+                        console.log('🎯 In streaming mode - processing audio chunk');
                         // Send audio chunks via WebSocket
                         const inputBuffer = event.inputBuffer;
                         const samples = inputBuffer.getChannelData(0);
                         const audioData = new Float32Array(samples.length);
                         audioData.set(samples);
 
+                        const base64Audio = base64EncodeArrayBuffer(audioData.buffer);
+                        console.log(`📤 Sending streaming audio chunk: ${samples.length} samples (${base64Audio.length} chars)`);
+
                         // Send audio chunk to server
                         socket.emit('audio_chunk', {
-                            audio: base64EncodeArrayBuffer(audioData.buffer),
+                            audio: base64Audio,
                             timestamp: Date.now()
                         });
                     }
@@ -948,8 +952,7 @@
                     document.getElementById('statusMessage').textContent =
                         `${currentMode.replace(/\b\w/g, l => l.toUpperCase())} active - Recording 2.5 seconds...`;
                 } else {
-                    // Stop streaming mode
-                    socket.emit('stop_streaming');
+                    // Keep streaming mode active
                     document.getElementById('statusMessage').textContent =
                         `${currentMode.replace(/\b\w/g, l => l.toUpperCase())} active - Speak continuously...`;
                 }

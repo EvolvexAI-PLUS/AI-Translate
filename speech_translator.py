@@ -514,15 +514,19 @@ def handle_audio_chunk(data):
 
         # Decode the base64 audio data
         if 'audio' in data:
+            print(f"📥 Received streaming audio chunk: {len(data['audio'])} chars")
             # Convert base64 audio chunk to float32 array
             audio_bytes = base64.b64decode(data['audio'])
             audio_np = np.frombuffer(audio_bytes, dtype=np.float32).copy()
+            print(f"🔧 Decoded audio chunk: {len(audio_np)} samples")
 
             # Accumulate audio data
             if len(streaming_buffer) == 0:
                 streaming_buffer = audio_np.tolist()
             else:
                 streaming_buffer.extend(audio_np.tolist())
+
+            print(f"📊 Streaming buffer now: {len(streaming_buffer)} samples")
 
             # Convert accumulated data to numpy array for processing
             streaming_audio_data = np.array(streaming_buffer, dtype=np.float32)
