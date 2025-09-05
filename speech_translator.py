@@ -395,6 +395,31 @@ except Exception as e:
 def index():
     return render_template('index.html')
 
+@app.route('/debug-tts')
+def debug_tts():
+    """Debug endpoint to test TTS generation directly"""
+    if translator is None:
+        return jsonify({'error': 'Translator not initialized'})
+
+    test_text = "Hello world"
+    print(f"🔍 Debug TTS test with text: '{test_text}'")
+
+    try:
+        audio_bytes = translator._generate_elevenlabs_tts(test_text, "en")
+        result = {
+            'test_text': test_text,
+            'audio_generated': len(audio_bytes) > 0,
+            'audio_bytes': len(audio_bytes),
+            'audio_base64_length': len(base64.b64encode(audio_bytes).decode()) if audio_bytes else 0,
+            'elevenlabs_available': translator.elevenlabs_api_available,
+            'has_client': hasattr(translator, 'elevenlabs_client') and translator.elevenlabs_client is not None
+        }
+        print(f"🔍 Debug result: {result}")
+        return jsonify(result)
+    except Exception as e:
+        print(f"❌ Debug TTS error: {e}")
+        return jsonify({'error': str(e)})
+
 @app.route('/status')
 def get_status():
     if translator is None:
@@ -414,7 +439,13 @@ def get_status():
             'gemini': '2.5-flash' if translator.google_api_available else 'not_configured',
             'elevenlabs': 'flash-v2.5' if translator.elevenlabs_api_available else 'not_configured'
         },
-        'cache_size': len(translator.translation_cache) if hasattr(translator, 'translation_cache') else 0
+        'cache_size': len(translator.translation_cache) if hasattr(translator, 'translation_cache') else 0,
+        'debug_info': {
+            'elevenlabs_initialized': translator.elevenlabs_api_available,
+            'elevenlabs_client_exists': hasattr(translator, 'elevenlabs_client') and translator.elevenlabs_client is not None,
+            'py_version': __import__('sys').version.split()[0],
+            'timestamp': __import__('time').time()
+        }
     })
 
 # WebSocket event handlers for real-time streaming
