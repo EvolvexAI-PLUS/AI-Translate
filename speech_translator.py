@@ -405,6 +405,12 @@ socketio = SocketIO(
 # Global translator instance
 translator = None
 
+# Global streaming audio buffer for accumulating chunks
+streaming_buffer = []
+streaming_audio_data = b''
+streaming_last_processed = time.time()
+streaming_threshold_samples = 16000 * 2  # 2 seconds at 16kHz
+
 try:
     translator = SpeechTranslator()  # Now uses only Gemini 2.5 Flash for everything
     print("🎙️ SpeechTranslator initialized successfully")
@@ -487,12 +493,19 @@ def handle_disconnect():
 
 @socketio.on('start_streaming')
 def handle_start_streaming():
+    global streaming_buffer, streaming_audio_data, streaming_last_processed
     print('Client started WebSocket streaming mode')
+    # Reset streaming buffers
+    streaming_buffer = []
+    streaming_audio_data = b''
+    streaming_last_processed = time.time()
     emit('streaming_started', {'message': 'Real-time WebSocket streaming active'})
 
 @socketio.on('audio_chunk')
 def handle_audio_chunk(data):
-    """Handle real-time audio chunks from WebSocket client"""
+    """Handle real-time audio chunks from WebSocket client - accumulate and process"""
+    global streaming_buffer, streaming_audio_data, streaming_last_processed, streaming_threshold_samples
+
     try:
         # Check if translator is available
         if translator is None:
@@ -501,27 +514,65 @@ def handle_audio_chunk(data):
 
         # Decode the base64 audio data
         if 'audio' in data:
+            # Convert base64 audio chunk to float32 array
             audio_bytes = base64.b64decode(data['audio'])
             audio_np = np.frombuffer(audio_bytes, dtype=np.float32).copy()
 
-            # Process with Gemini
-            detected_lang, transcribed_text, translated_text = translator.process_audio_with_gemini(audio_np)
+            # Accumulate audio data
+            if len(streaming_buffer) == 0:
+                streaming_buffer = audio_np.tolist()
+            else:
+                streaming_buffer.extend(audio_np.tolist())
 
-            # Generate TTS if we have translation
-            audio_base64 = ""
-            if translated_text:
-                audio_bytes = translator._generate_tts(translated_text, "ar" if detected_lang == "en" else "en")
-                audio_base64 = base64.b64encode(audio_bytes).decode()
+            # Convert accumulated data to numpy array for processing
+            streaming_audio_data = np.array(streaming_buffer, dtype=np.float32)
 
-            # Send real-time result back to client via WebSocket
-            emit('translation_result', {
-                'original_language': detected_lang,
-                'transcribed_text': transcribed_text,
-                'translated_language': "ar" if detected_lang == "en" else "en",
-                'translated_text': translated_text,
-                'audio_data': audio_base64,
-                'timestamp': time.time()
-            })
+            # Process only if we have enough data and it's been a while since last processing
+            current_time = time.time()
+            has_enough_data = len(streaming_buffer) >= streaming_threshold_samples
+            time_since_last_processed = current_time - streaming_last_processed
+
+            if has_enough_data and time_since_last_processed > 1.5:  # Process every 1.5 seconds
+                print(f"📊 Processing accumulated streaming audio: {len(streaming_audio_data)} samples")
+
+                # Process with Gemini for transcription and translation
+                detected_lang, transcribed_text, translated_text = translator.process_audio_with_gemini(streaming_audio_data)
+
+                # Generate TTS if we have translation
+                audio_base64 = ""
+                if translated_text:
+                    print(f"🎤 Generating TTS for streaming translation: '{translated_text}'")
+                    audio_bytes = translator._generate_tts(translated_text, "ar" if detected_lang == "en" else "en")
+                    audio_base64 = base64.b64encode(audio_bytes).decode()
+
+                # Send real-time result back to client via WebSocket
+                if transcribed_text or translated_text:
+                    emit('translation_result', {
+                        'original_language': detected_lang,
+                        'transcribed_text': transcribed_text,
+                        'translated_language': "ar" if detected_lang == "en" else "en",
+                        'translated_text': translated_text,
+                        'audio_data': audio_base64,
+                        'streaming': True,
+                        'timestamp': time.time()
+                    })
+
+                    print(f"✅ Streaming result sent: {transcribed_text} → {translated_text}")
+
+                # Reset for next processing window
+                streaming_last_processed = current_time
+                streaming_buffer = []
+                streaming_audio_data = b''
+
+            else:
+                # Send status update indicating buffering
+                if len(streaming_buffer) > 0:
+                    buffer_seconds = len(streaming_buffer) / 16000
+                    emit('streaming_status', {
+                        'message': f'Buffering audio... {buffer_seconds:.1f}s recorded',
+                        'buffer_size': len(streaming_buffer),
+                        'timestamp': time.time()
+                    })
 
     except Exception as e:
         print(f"WebSocket audio processing error: {e}")
@@ -529,7 +580,46 @@ def handle_audio_chunk(data):
 
 @socketio.on('stop_streaming')
 def handle_stop_streaming():
+    global streaming_buffer, streaming_audio_data, streaming_last_processed
     print('Client stopped WebSocket streaming mode')
+    print(f'Final audio buffer size: {len(streaming_buffer)} samples')
+
+    # Process any remaining audio before stopping
+    if len(streaming_buffer) > 0:
+        try:
+            # Convert accumulated data to numpy array
+            streaming_audio_data = np.array(streaming_buffer, dtype=np.float32)
+            print(f"📊 Processing final streaming audio: {len(streaming_audio_data)} samples")
+
+            # Process with Gemini
+            detected_lang, transcribed_text, translated_text = translator.process_audio_with_gemini(streaming_audio_data)
+
+            # Generate TTS if we have translation
+            audio_base64 = ""
+            if translated_text:
+                audio_bytes = translator._generate_tts(translated_text, "ar" if detected_lang == "en" else "en")
+                audio_base64 = base64.b64encode(audio_bytes).decode()
+
+            # Send final result
+            emit('translation_result', {
+                'original_language': detected_lang,
+                'transcribed_text': transcribed_text,
+                'translated_language': "ar" if detected_lang == "en" else "en",
+                'translated_text': translated_text,
+                'audio_data': audio_base64,
+                'streaming': False,
+                'final_result': True,
+                'timestamp': time.time()
+            })
+
+        except Exception as e:
+            print(f"Error processing final streaming audio: {e}")
+
+    # Reset streaming buffers
+    streaming_buffer = []
+    streaming_audio_data = b''
+    streaming_last_processed = time.time()
+
     emit('streaming_stopped', {'message': 'Real-time WebSocket streaming stopped'})
 
 @app.route('/translate', methods=['POST'])

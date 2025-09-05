@@ -823,6 +823,14 @@
                 console.log('🛑 Streaming stopped:', data);
                 updateStatus('Streaming stopped', 'warning');
             });
+
+            socket.on('streaming_status', function(data) {
+                console.log('⏳ Streaming status:', data);
+                // Optional: update UI with buffering status
+                if (data.buffer_size > 0) {
+                    updateStatus('Recording...', 'success');
+                }
+            });
         }
 
         // Show translator interface
