@@ -6,8 +6,8 @@ flask-socketio==5.3.6
 eventlet==0.36.1
 
 # AI Models
-google-generativeai==0.8.2
-elevenlabs==1.7.0
+google-generativeai
+elevenlabs
 
 # Data Science / Audio Processing
 numpy==1.26.4

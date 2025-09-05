@@ -9,7 +9,36 @@ from flask_socketio import SocketIO, emit, disconnect
 import io
 import base64
 import wave
-from elevenlabs import ElevenLabs
+try:
+    # Import elevenlabs with proper error handling for Railway compatibility
+    try:
+        from elevenlabs import ElevenLabs
+        ELEVENLABS_AVAILABLE = True
+    except ImportError:
+        # Try alternative import methods
+        try:
+            from elevenlabs.client import ElevenLabs
+            ELEVENLABS_AVAILABLE = True
+        except ImportError:
+            try:
+                import elevenlabs
+                ElevenLabs = elevenlabs.ElevenLabs
+                ELEVENLABS_AVAILABLE = True
+            except ImportError:
+                print("⚠️  ElevenLabs library not available - TTS features will be disabled")
+                ElevenLabs = None
+                ELEVENLABS_AVAILABLE = False
+except ImportError:
+    # Try alternative import for different versions
+    try:
+        from elevenlabs.client import ElevenLabs
+    except ImportError:
+        # For very old versions
+        try:
+            import elevenlabs
+            ElevenLabs = elevenlabs.ElevenLabs
+        except ImportError:
+            ElevenLabs = None
 import threading
 import time
 import numpy as np
@@ -36,7 +65,11 @@ class SpeechTranslator:
 
         # Initialize ElevenLabs for high-quality, low-latency TTS
         elevenlabs_api_key = os.getenv('ELEVEN_LABS_API_KEY')
-        if not elevenlabs_api_key:
+
+        if not ELEVENLABS_AVAILABLE:
+            print("⚠️  ElevenLabs library import failed - TTS features will be disabled")
+            self.elevenlabs_api_available = False
+        elif not elevenlabs_api_key:
             print("⚠️  WARNING: ELEVEN_LABS_API_KEY not found - TTS features disabled")
             self.elevenlabs_api_available = False
         else:
@@ -221,6 +254,11 @@ class SpeechTranslator:
     def _generate_elevenlabs_tts(self, text: str, language: str) -> bytes:
         """Generate high-quality TTS using ElevenLabs Flash v2.5 model for low latency"""
         try:
+            # Check if ElevenLabs is available
+            if not hasattr(self, 'elevenlabs_client') or not self.elevenlabs_client:
+                print("ElevenLabs client not initialized")
+                return b''
+
             # Map language to appropriate ElevenLabs male voice IDs
             voice_map = {
                 'en': '1SM7GgM6IMuvQlz2BwM3',  # Adam (male) - natural English voice
