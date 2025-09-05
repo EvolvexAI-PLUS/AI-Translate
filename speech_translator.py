@@ -282,7 +282,7 @@ class SpeechTranslator:
 
             print(f"🎤 Generating ElevenLabs TTS for: '{text}' in {language} (voice: {voice_id})")
 
-            # Use ElevenLabs client.generate method with Flash v2.5 model for low latency
+            # Use ElevenLabs client.generate method
             audio_generator = self.elevenlabs_client.generate(
                 text=text,
                 voice=voice_id,

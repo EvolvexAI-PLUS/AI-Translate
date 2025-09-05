@@ -7,7 +7,7 @@ eventlet==0.36.1
 
 # AI Models
 google-generativeai
-elevenlabs>=1.9.0
+elevenlabs
 
 # Data Science / Audio Processing
 numpy==1.26.4
