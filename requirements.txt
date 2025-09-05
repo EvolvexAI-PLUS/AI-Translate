@@ -20,6 +20,9 @@ gunicorn==21.2.0
 gevent==24.2.1
 gevent-websocket==0.10.1
 
+# CORS support for local development
+Flask-CORS==4.0.0
+
 # Additional dependencies for Railway containerization
 typing-inspection==0.4.1
 bidict==0.23.1

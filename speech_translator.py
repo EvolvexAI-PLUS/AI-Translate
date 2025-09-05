@@ -6,6 +6,7 @@ from typing import Tuple
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, render_template, send_file
 from flask_socketio import SocketIO, emit, disconnect
+from flask_cors import CORS
 import io
 import base64
 import wave
@@ -364,19 +365,29 @@ class SpeechTranslator:
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'real-time-translation-secret-key')
 
-# SocketIO configuration for Railway deployment
-# Allow Railway domains explicitly for CORS
-railway_origins = [
-    "https://ai-translate-ai-translator.up.railway.app",
-    "http://localhost:3000",  # For local development
-    "http://localhost:5001",  # For local development
-    "http://127.0.0.1:3000", # For local development
-    "http://127.0.0.1:5001", # For local development
+# CORS configuration for local development and Railway
+local_origins = [
+    "http://localhost:8000",   # Local development on port 8000 (primary)
+    "http://127.0.0.1:8000",  # Alternate localhost on port 8000
+    "http://localhost:5001",  # Fallback port
+    "http://127.0.0.1:5001"   # Fallback port alternate
 ]
+
+railway_origins = [
+    "https://ai-translate-ai-translator.up.railway.app"
+]
+
+# Use local origins for development, railway origins for production
+if os.getenv('FLASK_ENV') == 'development':
+    allowed_origins = local_origins + railway_origins
+    CORS(app, origins=allowed_origins)
+else:
+    allowed_origins = railway_origins
+    CORS(app, origins=railway_origins)
 
 socketio = SocketIO(
     app,
-    cors_allowed_origins=railway_origins,
+    cors_allowed_origins=allowed_origins,
     ping_timeout=60,
     ping_interval=25,
     async_mode=None  # Use standard mode for Railway compatibility
@@ -605,7 +616,7 @@ def translate_audio():
 
 if __name__ == "__main__":
     # Use environment variables for Railway deployment
-    port = int(os.getenv('PORT', 5001))
+    port = int(os.getenv('PORT', 8000))
     debug = os.getenv('FLASK_ENV') == 'development'
 
     socketio.run(
