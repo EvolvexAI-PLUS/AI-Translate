@@ -39,6 +39,16 @@ except ImportError:
             ElevenLabs = elevenlabs.ElevenLabs
         except ImportError:
             ElevenLabs = None
+
+# Import gTTS for fallback - works reliably on Railway
+try:
+    from gtts import gTTS
+    GTTS_AVAILABLE = True
+    print("✅ gTTS imported successfully - available as fallback TTS")
+except ImportError:
+    GTTS_AVAILABLE = False
+    print("⚠️  gTTS import failed - no fallback TTS available")
+    gTTS = None
 import threading
 import time
 import numpy as np
@@ -85,6 +95,7 @@ class SpeechTranslator:
                 self.elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
                 print("✅ ElevenLabs Flash v2.5 TTS initialized successfully")
                 self.elevenlabs_api_available = True
+                print("🎯 TTS Stack: ElevenLabs (Primary) + gTTS (Fallback)" if GTTS_AVAILABLE else "🎯 TTS Stack: ElevenLabs (Primary) - No fallback available")
             except Exception as e:
                 print(f"❌ ElevenLabs API Error: {e}")
                 self.elevenlabs_api_available = False
@@ -259,57 +270,72 @@ class SpeechTranslator:
                 self.cache_timestamps.pop(cache_key, None)
         return None
 
-    def _generate_elevenlabs_tts(self, text: str, language: str) -> bytes:
-        """Generate high-quality TTS using ElevenLabs Flash v2.5 model for low latency"""
+    def _generate_tts(self, text: str, language: str) -> bytes:
+        """Generate TTS with ElevenLabs primary + gTTS fallback for Railway compatibility"""
         try:
-            # Check if ElevenLabs is available
-            if not hasattr(self, 'elevenlabs_client') or not self.elevenlabs_client:
-                print("❌ ElevenLabs client not initialized")
-                return b''
+            # Try ElevenLabs first (higher quality, faster)
+            if (hasattr(self, 'elevenlabs_client') and self.elevenlabs_client and
+                self.elevenlabs_api_available):
+                try:
+                    print(f"🎤 Trying ElevenLabs TTS for: '{text}' in {language}")
 
-            if not self.elevenlabs_api_available:
-                print("❌ ElevenLabs API not available - TTS disabled")
-                return b''
+                    # Map language to appropriate ElevenLabs male voice IDs
+                    voice_map = {
+                        'en': '21m00Tcm4TlvDq8ikWAM',  # Rachel (female) - clear English voice
+                        'ar': '21m00Tcm4TlvDq8ikWAM'   # Rachel - can handle Arabic too
+                    }
 
-            # Map language to appropriate ElevenLabs male voice IDs
-            voice_map = {
-                'en': '1SM7GgM6IMuvQlz2BwM3',  # Adam (male) - natural English voice
-                'ar': '1SM7GgM6IMuvQlz2BwM3'   # Ziad - professional Arabic male voice
-            }
+                    voice_id = voice_map.get(language, voice_map['en'])
 
-            # Use English voice as fallback for other languages
-            voice_id = voice_map.get(language, voice_map['en'])
+                    audio_generator = self.elevenlabs_client.text_to_speech.convert(
+                        text=text,
+                        voice_id=voice_id,
+                        model_id="eleven_turbo_v2_5",
+                        output_format="mp3_22050_32"
+                    )
 
-            print(f"🎤 Generating ElevenLabs TTS for: '{text}' in {language} (voice: {voice_id})")
+                    # Convert to bytes
+                    audio_bytes = b''
+                    chunk_count = 0
+                    for chunk in audio_generator:
+                        audio_bytes += chunk
+                        chunk_count += 1
 
-            # Use the correct ElevenLabs API method
-            audio_generator = self.elevenlabs_client.text_to_speech.convert(
-                text=text,
-                voice_id=voice_id,
-                model_id="eleven_turbo_v2_5",
-                output_format="mp3_22050_32"
-            )
+                    if len(audio_bytes) > 0:
+                        print(f"✅ ElevenLabs TTS generated: {len(audio_bytes)} bytes in {chunk_count} chunks")
+                        return audio_bytes
+                    else:
+                        print("⚠️ ElevenLabs returned empty audio data - falling back to gTTS")
+                        raise Exception("Empty audio data")
 
-            # Convert to bytes
-            audio_bytes = b''
-            chunk_count = 0
-            for chunk in audio_generator:
-                audio_bytes += chunk
-                chunk_count += 1
+                except Exception as e:
+                    print(f"⚠️ ElevenLabs TTS failed: {e} - trying gTTS fallback")
 
-            print(f"✅ ElevenLabs TTS generated: {len(audio_bytes)} bytes in {chunk_count} chunks")
+            # Fallback to gTTS (reliable on Railway)
+            if GTTS_AVAILABLE and gTTS:
+                try:
+                    print(f"🎵 Using gTTS fallback for: '{text}' in {language}")
 
-            if len(audio_bytes) == 0:
-                print("⚠️ Warning: ElevenLabs returned empty audio data")
-                return b''
-            else:
-                print(f"🎵 Audio data ready for base64 encoding: {len(audio_bytes)} bytes")
-                return audio_bytes
+                    # Map language codes for gTTS
+                    tts_lang = 'en' if language == 'en' else 'ar'
+
+                    tts = gTTS(text=text, lang=tts_lang, slow=False)
+                    audio_buffer = io.BytesIO()
+                    tts.write_to_fp(audio_buffer)
+                    audio_bytes = audio_buffer.getvalue()
+
+                    print(f"✅ gTTS generated: {len(audio_bytes)} bytes")
+                    return audio_bytes
+
+                except Exception as gtts_error:
+                    print(f"❌ gTTS backup also failed: {gtts_error}")
+
+            # Final fallback - return empty (will show error to user)
+            print("❌ All TTS services failed - no audio will be generated")
+            return b''
 
         except Exception as e:
-            print(f"❌ ElevenLabs TTS error: {e}")
-            print(f"🔍 TTS failed for text: {text}")
-            # ElevenLabs Flash v2.5 should be very reliable, return empty on failure
+            print(f"❌ TTS error: {e}")
             return b''
 
 
@@ -346,8 +372,8 @@ class SpeechTranslator:
     def _tts_worker(self, text: str, lang: str):
         """Legacy TTS method - now uses ElevenLabs for consistency"""
         try:
-            # Use ElevenLabs for high-quality, low-latency TTS
-            audio_bytes = self._generate_elevenlabs_tts(text, lang)
+            # Use TTS with ElevenLabs + gTTS fallback
+            audio_bytes = self._generate_tts(text, lang)
             if audio_bytes:
                 # Save and play the audio
                 import tempfile
@@ -401,14 +427,17 @@ def debug_tts():
     print(f"🔍 Debug TTS test with text: '{test_text}'")
 
     try:
-        audio_bytes = translator._generate_elevenlabs_tts(test_text, "en")
+        audio_bytes = translator._generate_tts(test_text, "en")
         result = {
             'test_text': test_text,
             'audio_generated': len(audio_bytes) > 0,
             'audio_bytes': len(audio_bytes),
             'audio_base64_length': len(base64.b64encode(audio_bytes).decode()) if audio_bytes else 0,
             'elevenlabs_available': translator.elevenlabs_api_available,
-            'has_client': hasattr(translator, 'elevenlabs_client') and translator.elevenlabs_client is not None
+            'has_client': hasattr(translator, 'elevenlabs_client') and translator.elevenlabs_client is not None,
+            'gtts_available': GTTS_AVAILABLE,
+            'tts_fallback_available': GTTS_AVAILABLE,
+            'tts_service_used': 'gtts' if len(audio_bytes) > 0 and not translator.elevenlabs_api_available else 'elevenlabs'
         }
         import json
         print(f"🔍 Debug result: {json.dumps(result, indent=2)}")
@@ -434,7 +463,8 @@ def get_status():
         'status': 'running',
         'models_loaded': {
             'gemini': '2.5-flash' if translator.google_api_available else 'not_configured',
-            'elevenlabs': 'flash-v2.5' if translator.elevenlabs_api_available else 'not_configured'
+            'elevenlabs': 'flash-v2.5' if translator.elevenlabs_api_available else 'not_configured',
+            'gtts': 'available' if GTTS_AVAILABLE else 'not_available'
         },
         'cache_size': len(translator.translation_cache) if hasattr(translator, 'translation_cache') else 0,
         'debug_info': {
@@ -480,7 +510,7 @@ def handle_audio_chunk(data):
             # Generate TTS if we have translation
             audio_base64 = ""
             if translated_text:
-                audio_bytes = translator._generate_elevenlabs_tts(translated_text, "ar" if detected_lang == "en" else "en")
+                audio_bytes = translator._generate_tts(translated_text, "ar" if detected_lang == "en" else "en")
                 audio_base64 = base64.b64encode(audio_bytes).decode()
 
             # Send real-time result back to client via WebSocket
@@ -565,9 +595,9 @@ def translate_audio():
         # Determine target language based on detected language
         translated_lang = "en" if detected_lang == "ar" else "ar"
 
-        # Generate high-quality audio with ElevenLabs Flash v2.5 model for low latency
-        if translator.elevenlabs_api_available and translated_text:
-            audio_bytes = translator._generate_elevenlabs_tts(translated_text, translated_lang)
+        # Generate high-quality audio with TTS (ElevenLabs + gTTS fallback)
+        if translated_text:
+            audio_bytes = translator._generate_tts(translated_text, translated_lang)
             if len(audio_bytes) == 0:
                 print("⚠️ ElevenLabs TTS returned empty audio data")
             else:
