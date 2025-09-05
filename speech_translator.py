@@ -344,9 +344,18 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'real-time-translation-secret-key')
 
 # SocketIO configuration for Railway deployment
+# Allow Railway domains explicitly for CORS
+railway_origins = [
+    "https://ai-translate-ai-translator.up.railway.app",
+    "http://localhost:3000",  # For local development
+    "http://localhost:5001",  # For local development
+    "http://127.0.0.1:3000", # For local development
+    "http://127.0.0.1:5001", # For local development
+]
+
 socketio = SocketIO(
     app,
-    cors_allowed_origins=["*"],
+    cors_allowed_origins=railway_origins,
     ping_timeout=60,
     ping_interval=25,
     async_mode=None  # Use standard mode for Railway compatibility
