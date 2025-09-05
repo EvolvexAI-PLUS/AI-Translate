@@ -108,10 +108,37 @@ python speech_translator.py
 
 ## 🐛 Troubleshooting
 
+### Audio Not Audible Issues
+
+If audio works locally but not on Railway deployment:
+
+1. **Check ElevenLabs API Key**: Ensure `ELEVEN_LABS_API_KEY` is set in Railway environment variables
+2. **Verify API Key Access**: Check Railway deployment logs for successful initialization
+3. **Look for Debug Messages**:
+   ```
+   🔍 ELEVEN_LABS_API_KEY status: Present ✅
+   🔑 ElevenLabs API Key loaded: sk_cb81f...b22 ***
+   ✅ ElevenLabs Flash v2.5 TTS initialized successfully
+   ```
+4. **Check TTS Generation**: Look for audio generation logs:
+   ```
+   🎤 Generating ElevenLabs TTS for: 'text' in en
+   ✅ ElevenLabs TTS generated: XXXX bytes
+   🎵 Audio data ready for base64 encoding
+   ```
+
+### Other Common Issues
+
 - **HTTP 400 errors**: Fixed in frontend by proper audio data formatting
 - **Microphone permission**: Ensure HTTPS/Secure context for production
 - **SocketIO issues**: Railway handles WebSocket connections automatically
-- **TTS not playing**: Ensure browser allows autoplay for your domain
+- **Browser autoplay**: Some browsers block autoplay - look for manual play button
+
+### Getting ElevenLabs API Key
+
+1. Visit [ElevenLabs](https://elevenlabs.io/account/profile)
+2. Sign up/login to get your API key
+3. Copy the key to Railway environment variables: `ELEVEN_LABS_API_KEY`
 
 ## 📝 License
 

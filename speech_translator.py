@@ -66,14 +66,21 @@ class SpeechTranslator:
         # Initialize ElevenLabs for high-quality, low-latency TTS
         elevenlabs_api_key = os.getenv('ELEVEN_LABS_API_KEY')
 
+        print(f"🔍 ELEVEN_LABS_API_KEY status: {'Present' if elevenlabs_api_key else 'Missing'}")
+        print(f"🔍 ELEVENLABS_AVAILABLE: {ELEVENLABS_AVAILABLE}")
+
         if not ELEVENLABS_AVAILABLE:
             print("⚠️  ElevenLabs library import failed - TTS features will be disabled")
             self.elevenlabs_api_available = False
         elif not elevenlabs_api_key:
             print("⚠️  WARNING: ELEVEN_LABS_API_KEY not found - TTS features disabled")
+            print("💡 For Railway deployment: ensure ELEVEN_LABS_API_KEY is set in your project's environment variables")
             self.elevenlabs_api_available = False
         else:
             try:
+                # Mask the API key in logs for security
+                masked_key = elevenlabs_api_key[:8] + '...' + elevenlabs_api_key[-4:] if len(elevenlabs_api_key) > 12 else '***'
+                print(f"🔑 ElevenLabs API Key loaded: {masked_key}")
                 self.elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
                 print("✅ ElevenLabs Flash v2.5 TTS initialized successfully")
                 self.elevenlabs_api_available = True
@@ -256,7 +263,11 @@ class SpeechTranslator:
         try:
             # Check if ElevenLabs is available
             if not hasattr(self, 'elevenlabs_client') or not self.elevenlabs_client:
-                print("ElevenLabs client not initialized")
+                print("❌ ElevenLabs client not initialized")
+                return b''
+
+            if not self.elevenlabs_api_available:
+                print("❌ ElevenLabs API not available - TTS disabled")
                 return b''
 
             # Map language to appropriate ElevenLabs male voice IDs
@@ -268,7 +279,7 @@ class SpeechTranslator:
             # Use English voice as fallback for other languages
             voice_id = voice_map.get(language, voice_map['en'])
 
-            print(f"Generating ElevenLabs TTS for: '{text}' in {language}")
+            print(f"🎤 Generating ElevenLabs TTS for: '{text}' in {language} (voice: {voice_id})")
 
             # Use ElevenLabs client.generate method with Flash v2.5 model for low latency
             audio_generator = self.elevenlabs_client.generate(
@@ -279,15 +290,23 @@ class SpeechTranslator:
 
             # Convert to bytes
             audio_bytes = b''
+            chunk_count = 0
             for chunk in audio_generator:
                 audio_bytes += chunk
+                chunk_count += 1
 
-            print(f"ElevenLabs TTS generated: {len(audio_bytes)} bytes")
-            return audio_bytes
+            print(f"✅ ElevenLabs TTS generated: {len(audio_bytes)} bytes in {chunk_count} chunks")
+
+            if len(audio_bytes) == 0:
+                print("⚠️ Warning: ElevenLabs returned empty audio data")
+                return b''
+            else:
+                print(f"🎵 Audio data ready for base64 encoding: {len(audio_bytes)} bytes")
+                return audio_bytes
 
         except Exception as e:
-            print(f"ElevenLabs TTS error: {e}")
-
+            print(f"❌ ElevenLabs TTS error: {e}")
+            print(f"🔍 TTS failed for text: {text}")
             # ElevenLabs Flash v2.5 should be very reliable, return empty on failure
             return b''
 
@@ -521,13 +540,20 @@ def translate_audio():
         # Generate high-quality audio with ElevenLabs Flash v2.5 model for low latency
         if translator.elevenlabs_api_available and translated_text:
             audio_bytes = translator._generate_elevenlabs_tts(translated_text, translated_lang)
+            if len(audio_bytes) == 0:
+                print("⚠️ ElevenLabs TTS returned empty audio data")
+            else:
+                print(f"📦 Generated audio: {len(audio_bytes)} bytes")
         else:
             audio_bytes = b''  # Empty audio if TTS not available
             if not translator.elevenlabs_api_available:
-                print("TTS not available - ElevenLabs API not configured")
+                print("❌ TTS not available - ElevenLabs API not configured")
+            else:
+                print("ℹ️ No translated text to generate audio for")
 
         # Convert to base64 for client
         audio_base64 = base64.b64encode(audio_bytes).decode()
+        print(f"🔧 Base64 audio length: {len(audio_base64)} characters")
 
         print(f"✅ Translated: '{transcribed_text}' → '{translated_text}'")
 

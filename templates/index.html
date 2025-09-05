@@ -951,19 +951,27 @@
             }
 
             // Setup audio playback
-            if (data.audio_data) {
-                const audioSrc = `data:audio/mp3;base64,${data.audio_data}`;
-                document.getElementById('translationAudio').src = audioSrc;
-                document.getElementById('translationAudio').style.display = 'block';
-                document.getElementById('playBtn').style.display = 'inline-block';
+            if (data.audio_data && data.audio_data.length > 0) {
+                console.log('🎵 Setting up audio playback, data length:', data.audio_data.length);
 
-                // Auto-play with slight delay
-                setTimeout(() => {
-                    document.getElementById('translationAudio').play().catch(e => {
-                        console.log('Autoplay blocked, manual play available');
-                        updateStatus('Translation ready - click play button to hear', 'success');
-                    });
-                }, 500);
+                // Try different MIME types for better compatibility
+                const audioSrc = `data:audio/mpeg;base64,${data.audio_data}`;
+                const audioElement = document.getElementById('translationAudio');
+
+                audioElement.src = audioSrc;
+                audioElement.style.display = 'block';
+                audioElement.load(); // Force reload
+
+                const playBtn = document.getElementById('playBtn');
+                playBtn.style.display = 'inline-block';
+                playBtn.onclick = () => playTranslation();
+
+                // Don't auto-play due to browser restrictions
+                console.log('🎵 Audio loaded, click play button to hear translation');
+                updateStatus('Translation ready - click play button to hear', 'success');
+            } else {
+                console.log('⚠️ No audio data received from backend');
+                updateStatus('Translation complete (no audio available)', 'warning');
             }
 
             updateStatus('✅ Translation complete!', 'success');
