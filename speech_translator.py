@@ -282,26 +282,13 @@ class SpeechTranslator:
 
             print(f"🎤 Generating ElevenLabs TTS for: '{text}' in {language} (voice: {voice_id})")
 
-            # Try multiple API methods for compatibility
-            if hasattr(self.elevenlabs_client, 'text_to_speech'):
-                # Newer API (ElevenLabs >= 1.x)
-                audio_generator = self.elevenlabs_client.text_to_speech.generate(
-                    text=text,
-                    voice=voice_id,
-                    model="eleven_flash_v2_5"
-                )
-            elif hasattr(self.elevenlabs_client, 'generate'):
-                # Standard API method
-                audio_generator = self.elevenlabs_client.generate(
-                    text=text,
-                    voice=voice_id,
-                    model="eleven_flash_v2_5"
-                )
-            else:
-                # Fallback for older versions
-                available_methods = [method for method in dir(self.elevenlabs_client) if not method.startswith('_')]
-                print(f"❌ Available ElevenLabs methods: {available_methods}")
-                raise AttributeError("No TTS method found in ElevenLabs client")
+            # Use the correct ElevenLabs API method
+            audio_generator = self.elevenlabs_client.text_to_speech.convert(
+                text=text,
+                voice_id=voice_id,
+                model_id="eleven_turbo_v2_5",
+                output_format="mp3_22050_32"
+            )
 
             # Convert to bytes
             audio_bytes = b''

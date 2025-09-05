@@ -44,12 +44,13 @@ def debug_elevenlabs():
     # Test TTS generation
     try:
         print("🎤 Testing TTS generation...")
-        audio = client.generate(
+        audio = client.text_to_speech.convert(
             text="Hello world test",
-            voice="1SM7GgM6IMuvQlz2BwM3",
-            model="eleven_flash_v2_5"
+            voice_id="1SM7GgM6IMuvQlz2BwM3",
+            model_id="eleven_turbo_v2_5",
+            output_format="mp3_22050_32"
         )
-        audio_bytes = b''.join(chunk for chunk in audio)
+        audio_bytes = b''.join(chunk for chunk in audio) if hasattr(audio, '__iter__') else audio
         print(f"✅ TTS generation successful: {len(audio_bytes)} bytes")
         return True
     except Exception as e:
