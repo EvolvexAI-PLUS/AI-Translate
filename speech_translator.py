@@ -23,16 +23,30 @@ class SpeechTranslator:
 
         gemini_api_key = gemini_api_key or os.getenv('GOOGLE_API_KEY')
         if not gemini_api_key:
-            raise ValueError("Google API key must be provided or set in GOOGLE_API_KEY environment variable.")
-        genai.configure(api_key=gemini_api_key)
-        print("Gemini 2.5 Flash initialized successfully.")
+            print("⚠️  WARNING: GOOGLE_API_KEY not found - App will run but AI features disabled")
+            self.google_api_available = False
+        else:
+            try:
+                genai.configure(api_key=gemini_api_key)
+                print("✅ Gemini 2.5 Flash initialized successfully")
+                self.google_api_available = True
+            except Exception as e:
+                print(f"❌ Gemini API Error: {e}")
+                self.google_api_available = False
 
         # Initialize ElevenLabs for high-quality, low-latency TTS
         elevenlabs_api_key = os.getenv('ELEVEN_LABS_API_KEY')
         if not elevenlabs_api_key:
-            raise ValueError("ElevenLabs API key must be provided or set in ELEVEN_LABS_API_KEY environment variable.")
-        self.elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
-        print("ElevenLabs Flash v2.5 TTS initialized successfully.")
+            print("⚠️  WARNING: ELEVEN_LABS_API_KEY not found - TTS features disabled")
+            self.elevenlabs_api_available = False
+        else:
+            try:
+                self.elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
+                print("✅ ElevenLabs Flash v2.5 TTS initialized successfully")
+                self.elevenlabs_api_available = True
+            except Exception as e:
+                print(f"❌ ElevenLabs API Error: {e}")
+                self.elevenlabs_api_available = False
 
         self.source_language = None
 
@@ -297,7 +311,7 @@ socketio = SocketIO(
     cors_allowed_origins=["*"],
     ping_timeout=60,
     ping_interval=25,
-    async_mode='gevent' if os.getenv('RAILWAY_ENVIRONMENT') else None
+    async_mode='threading'  # Use threading for Railway compatibility
 )
 
 translator = SpeechTranslator()  # Now uses only Gemini 2.5 Flash for everything
@@ -311,8 +325,8 @@ def get_status():
     return jsonify({
         'status': 'running',
         'models_loaded': {
-            'gemini': '2.5-flash',
-            'elevenlabs': 'flash-v2.5'
+            'gemini': '2.5-flash' if translator.google_api_available else 'not_configured',
+            'elevenlabs': 'flash-v2.5' if translator.elevenlabs_api_available else 'not_configured'
         },
         'cache_size': len(translator.translation_cache) if hasattr(translator, 'translation_cache') else 0
     })
@@ -411,6 +425,12 @@ def translate_audio():
         print(f"Processing audio with {len(audio_np)} samples...")
 
         # Process audio directly with Gemini (transcription + translation)
+        if not translator.google_api_available:
+            return jsonify({
+                'error': 'Google Gemini API not configured. Please set GOOGLE_API_KEY in Railway environment variables.',
+                'setup_instructions': 'Add GOOGLE_API_KEY to Railway project variables. Get key from https://aistudio.google.com/app/apikey'
+            }), 500
+
         detected_lang, transcribed_text, translated_text = translator.process_audio_with_gemini(audio_np)
 
         if not transcribed_text:
@@ -420,7 +440,12 @@ def translate_audio():
         translated_lang = "en" if detected_lang == "ar" else "ar"
 
         # Generate high-quality audio with ElevenLabs Flash v2.5 model for low latency
-        audio_bytes = translator._generate_elevenlabs_tts(translated_text, translated_lang)
+        if translator.elevenlabs_api_available and translated_text:
+            audio_bytes = translator._generate_elevenlabs_tts(translated_text, translated_lang)
+        else:
+            audio_bytes = b''  # Empty audio if TTS not available
+            if not translator.elevenlabs_api_available:
+                print("TTS not available - ElevenLabs API not configured")
 
         # Convert to base64 for client
         audio_base64 = base64.b64encode(audio_bytes).decode()
