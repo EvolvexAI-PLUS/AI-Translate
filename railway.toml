@@ -1,12 +1,21 @@
 [build]
 builder = "NIXPACKS"
+buildCommand = "pip install -r requirements.txt"
 
 [deploy]
 startCommand = "python wsgi.py"
 healthcheckPath = "/health"
-restartPolicyType = "ON_FAILURE"
 healthcheckTimeout = 10
+restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
+restartPolicyDelay = 5
 
 [env]
 FLASK_ENV = "production"
+PORT = "8000"
+PYTHONUNBUFFERED = "true"
+
+[variables]
+# These will be set per environment in Railway dashboard
+GOOGLE_API_KEY=AIzaSyCpjoxh8iLYfkSTpEcqo5k2Uw-zgl5hXKg
+ELEVEN_LABS_API_KEY=sk_cb81f6743a5030f36963d60114d61f3c9766059eeeb5bb22
