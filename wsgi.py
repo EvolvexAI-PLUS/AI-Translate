@@ -1,48 +1,46 @@
 import os
-print("🚀 Starting AI Translator on Railway...")
 
-# Check Railway environment
-is_railway = os.getenv('RAILWAY_ENVIRONMENT')
-print(f"🚂 Railway Environment: {is_railway}")
+# Configuration
+port = int(os.getenv('PORT', 5001))
+is_railway = bool(os.getenv('RAILWAY_ENVIRONMENT'))
+
+print(f"🚀 Starting AI Translator on Railway (Port: {port})")
+
+# Create minimal Flask app for health checks
+from flask import Flask
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return {'status': 'healthy', 'port': port, 'railway': is_railway}, 200
+
+@app.route('/health')
+def health_check():
+    return {'status': 'healthy', 'port': port, 'railway': is_railway}, 200
+
+# Try to load SocketIO app if possible
+app_loaded = False
 
 try:
-    from speech_translator import socketio, app
-    print("✅ App and SocketIO imported successfully")
+    from speech_translator import socketio, translator
+    print("✅ SocketIO app loaded successfully")
+    app_loaded = True
+except Exception as e:
+    print(f"⚠️  SocketIO app failed to load: {e}")
+    print("🚨 Using minimal Flask app (health checks will work)")
 
-    port = int(os.getenv('PORT', 8000))
-    print(f"📡 Starting on port {port}")
-
-    # Simple health check before SocketIO startup
-    @app.route('/health')
-    def health_check():
-        return {'status': 'healthy', 'port': port, 'railway': bool(is_railway)}, 200
-
-    # Use Railway-specific configuration
-    if is_railway:
-        print("🎊 Running in Railway environment")
+if __name__ == "__main__":
+    if app_loaded:
+        print("🎯 Starting SocketIO application")
         socketio.run(
             app,
             host="0.0.0.0",
             port=port,
             debug=False,
             allow_unsafe_werkzeug=False,
-            log=False
+            log=False,
+            use_reloader=False
         )
     else:
-        print("🏠 Running locally")
-        socketio.run(
-            app,
-            host="0.0.0.0",
-            port=port,
-            debug=False,
-            allow_unsafe_werkzeug=False,
-            log=False
-        )
-
-except Exception as e:
-    import traceback
-    print(f"❌ Failed to start app: {e}")
-    print(traceback.format_exc())
-    print("🔧 Check Railway environment variables")
-    print("📝 Required: GOOGLE_API_KEY, ELEVEN_LABS_API_KEY")
-    exit(1)
+        print("🔄 Starting Flask app")
+        app.run(host='0.0.0.0', port=port, debug=False)
