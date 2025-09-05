@@ -15,5 +15,5 @@ restartPolicyDelay = 5
 
 [env]
 FLASK_ENV = "production"
-PORT = "8000"
+PORT = "8080"
 PYTHONUNBUFFERED = "true"

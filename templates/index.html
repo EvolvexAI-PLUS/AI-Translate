@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Real-Time AI Translator | Speak & Translate Instantly</title>
     <meta name="description" content="Real-time speech translation powered by AI. Translate between Arabic and English instantly with WebSocket streaming technology.">
+    <meta name="keywords" content="speech translation, AI translator, Arabic English translator, real-time translation, ElevenLabs TTS">
+    <meta name="author" content="AI Translator">
+    <meta name="robots" content="index, follow">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <!-- Preload critical resources -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <link rel="preload" href="https://cdn.socket.io/4.7.2/socket.io.min.js" as="script">
+
+    <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -738,16 +748,55 @@
 
         // Initialize WebSocket connection
         function initWebSocket() {
-            socket = io();
+            // Get current host for WebSocket connection
+            const protocol = window.location.protocol;
+            const host = window.location.hostname;
+            const port = window.location.port;
+            const wsUrl = `${protocol}//${host}:${port}`;
+
+            console.log(`🔌 Connecting to WebSocket at: ${wsUrl}`);
+
+            // Initialize Socket.IO with explicit URL
+            socket = io(wsUrl, {
+                transports: ['websocket', 'polling'], // Try WebSocket first, fallback to polling
+                timeout: 2000,                          // Connection timeout
+                forceNew: false,                        // Don't force new connection
+                reconnectionAttempts: 5,               // Retry up to 5 times
+                reconnectionDelay: 1000,               // Wait 1 second between retries
+                maxReconnectionDelay: 5000            // Max delay between retries
+            });
 
             socket.on('connect', function() {
-                console.log('✅ Connected to server');
+                console.log('✅ Successfully connected to WebSocket server');
                 updateStatus('Connected - Ready to translate', 'success');
             });
 
-            socket.on('disconnect', function() {
-                console.log('❌ Disconnected from server');
-                updateStatus('Connection lost - Reconnecting...', 'error');
+            socket.on('disconnect', function(reason) {
+                console.log(`❌ WebSocket disconnected - Reason: ${reason}`);
+                if (reason === 'io server disconnect') {
+                    console.log('🚨 Server disconnected - attempting manual reconnection...');
+                }
+                updateStatus('Connection lost - Reconnecting...', 'warning');
+            });
+
+            socket.on('connect_error', function(error) {
+                console.error('🚨 WebSocket connection error:', error);
+                updateStatus('Connection failed - Check server', 'error');
+            });
+
+            socket.on('connect_timeout', function() {
+                console.warn('⏰ WebSocket connection timeout');
+                updateStatus('Connection timeout - Retrying...', 'warning');
+            });
+
+            socket.on('reconnect', function(attemptNumber) {
+                console.log(`🔄 Reconnected to server after ${attemptNumber} attempts`);
+                updateStatus('Reconnected - Ready to translate', 'success');
+            });
+
+            socket.on('reconnecting', function(attemptNumber) {
+                console.log(`🔄 Attempting reconnection (${attemptNumber}/5)`);
+                updateStatus(`Reconnecting (${attemptNumber}/5)...`, 'warning');
             });
 
             socket.on('translation_result', function(data) {
