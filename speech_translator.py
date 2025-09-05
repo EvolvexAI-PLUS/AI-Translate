@@ -68,9 +68,10 @@ class SpeechTranslator:
 
         print(f"🔍 ELEVEN_LABS_API_KEY status: {'Present' if elevenlabs_api_key else 'Missing'}")
         print(f"🔍 ELEVENLABS_AVAILABLE: {ELEVENLABS_AVAILABLE}")
+        print("🌐 Railway deployment startup - checking ElevenLabs...")
 
         if not ELEVENLABS_AVAILABLE:
-            print("⚠️  ElevenLabs library import failed - TTS features will be disabled")
+            print("❌ ElevenLabs library import failed - TTS features will be disabled")
             self.elevenlabs_api_available = False
         elif not elevenlabs_api_key:
             print("⚠️  WARNING: ELEVEN_LABS_API_KEY not found - TTS features disabled")
