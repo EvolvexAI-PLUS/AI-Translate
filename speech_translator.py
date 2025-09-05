@@ -415,7 +415,8 @@ def debug_tts():
             'elevenlabs_available': translator.elevenlabs_api_available,
             'has_client': hasattr(translator, 'elevenlabs_client') and translator.elevenlabs_client is not None
         }
-        print(f"🔍 Debug result: {result}")
+        import json
+        print(f"🔍 Debug result: {json.dumps(result, indent=2)}")
         return jsonify(result)
     except Exception as e:
         print(f"❌ Debug TTS error: {e}")
