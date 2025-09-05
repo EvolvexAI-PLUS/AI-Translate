@@ -1,0 +1,14 @@
+# Nixpacks configuration for Railway deployment
+# Ensures ElevenLabs has necessary audio dependencies
+
+[phases.setup]
+nixPkgs = ["python311", "ffmpeg", "libsndfile", "sox"]
+
+[phases.install]
+dependsOn = ["setup"]
+
+[phases.build]
+dependsOn = ["install"]
+
+[start]
+cmd = "python wsgi.py"
