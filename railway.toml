@@ -1,0 +1,14 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "python wsgi.py"
+healthcheckPath = "/"
+restartPolicyType = "ON_FAILURE"
+railwayTomlVersion = "2"
+
+[build.buildCommand]
+# Railway will automatically install dependencies from requirements.txt
+
+[env]
+FLASK_ENV = "production"
