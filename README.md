@@ -100,7 +100,7 @@ python speech_translator.py
 
 ## 📊 Features
 
-- **Recording Mode**: Click microphone → speak for 2.5s → get translation
+- **Recording Mode**: Click microphone → speak for 5s → get translation
 - **Streaming Mode**: Click microphone → continuous real-time transcription
 - **Audio Playback**: Auto-plays ElevenLabs TTS after translation
 - **Language Detection**: Automatically detects Arabic vs English input

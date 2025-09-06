@@ -941,16 +941,16 @@
 
                 updateStatus(`${currentMode.replace(/\b\w/g, l => l.toUpperCase())} active - Speak now!`, 'success');
 
-                // For recording mode, auto-stop after 2.5 seconds
+                // For recording mode, auto-stop after 5 seconds
                 if (currentMode === 'recording') {
                     setTimeout(() => {
                         if (isRecording) {
                             stopRecording();
                         }
-                    }, 2500);
+                    }, 5000);
 
                     document.getElementById('statusMessage').textContent =
-                        `${currentMode.replace(/\b\w/g, l => l.toUpperCase())} active - Recording 2.5 seconds...`;
+                        `${currentMode.replace(/\b\w/g, l => l.toUpperCase())} active - Recording 5 seconds...`;
                 } else {
                     // Keep streaming mode active
                     document.getElementById('statusMessage').textContent =

@@ -645,7 +645,7 @@ def translate_audio():
         if len(audio_data) < 1600:  # Minimum 100ms at 16kHz (4 bytes per sample)
             return jsonify({'error': 'Audio data too short. Please record longer.'}), 400
 
-        if len(audio_data) > 500000:  # Maximum ~30 seconds at 16kHz
+        if len(audio_data) > 800000:  # Maximum ~50 seconds at 16kHz (increased for 5-second recordings)
             return jsonify({'error': 'Audio data too long. Please record shorter clips.'}), 400
 
         if len(audio_data) % 4 != 0:  # Float32 = 4 bytes per sample
