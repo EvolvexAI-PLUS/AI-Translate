@@ -7,14 +7,9 @@ eventlet==0.36.1
 
 # AI Models
 google-generativeai
-google-genai  # For Gemini Live API
 elevenlabs
 
 # Data Science / Audio Processing
-numpy==1.26.4
-
-# Async handling
-nest-asyncio==1.6.0
 numpy==1.26.4
 
 # Environment and Configuration
@@ -25,10 +20,6 @@ gTTS==2.5.1
 
 # WSGI Server for production (Railway uses this)
 gunicorn==21.2.0
-# Audio processing and speech recognition
-PyAudio==0.2.14
-speech-recognition==3.10.4
-psutil==6.1.0
 gevent==24.2.1
 gevent-websocket==0.10.1
 
@@ -44,6 +35,3 @@ click>=8.0
 blinker>=1.4
 simple-websocket>=0.10.0
 websocket-client>=0.57.0
-# Audio format conversion for Gemini Live API
-librosa==0.10.1
-soundfile==0.12.1
