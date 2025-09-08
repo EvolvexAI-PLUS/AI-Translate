@@ -745,6 +745,8 @@
             let processor = null;
             let stream = null;
             let recordedSamples = [];
+            let lastTranslationTimestamp = 0;
+            let translationSequence = 0;
     
             // Helper function for base64 encoding - make globally accessible immediately
             function base64EncodeArrayBuffer(arrayBuffer) {
@@ -1043,21 +1045,39 @@
             updateStatus('Ready to translate again', 'success');
         }
 
-        // Update translation display
+        // Update translation display with sequence control
         function updateTranslation(data) {
-            document.getElementById('originalText').textContent = data.transcribed_text || 'No speech detected';
-            document.getElementById('originalText').classList.remove('empty');
-            document.getElementById('translatedText').textContent = data.translated_text || 'Empty translation';
-            document.getElementById('translatedText').classList.remove('empty');
+            const currentTimestamp = Date.now();
+            const currentSequence = translationSequence++;
 
-            // Update language badges
-            if (data.original_language) {
-                document.getElementById('originalLangBadge').textContent = data.original_language.toUpperCase();
-            }
-            if (data.translated_language) {
-                document.getElementById('translationLangBadge').textContent = data.translated_language.toUpperCase();
+            // Check if this translation result is out-of-sequence or too old (prevents reversion)
+            const translationAge = currentTimestamp - lastTranslationTimestamp;
+            console.log(`🏷️ Translation update attempt: seq=${currentSequence}, age=${translationAge}ms, text="${data.transcribed_text?.substring(0, 30)}..."`);
+
+            // Only update if this is a new sequence (prevents duplicates) or significant translation
+            if (currentSequence >= lastTranslationTimestamp || translationAge > 2000) {
+                lastTranslationTimestamp = currentTimestamp;
+
+                console.log(`✅ Updating UI with new translation result: "${data.transcribed_text?.substring(0, 30)}"`);
+
+                document.getElementById('originalText').textContent = data.transcribed_text || 'No speech detected';
+                document.getElementById('originalText').classList.remove('empty');
+                document.getElementById('translatedText').textContent = data.translated_text || 'Empty translation';
+                document.getElementById('translatedText').classList.remove('empty');
+
+                // Update language badges
+                if (data.original_language) {
+                    document.getElementById('originalLangBadge').textContent = data.original_language.toUpperCase();
+                }
+                if (data.translated_language) {
+                    document.getElementById('translationLangBadge').textContent = data.translated_language.toUpperCase();
+                }
+            } else {
+                console.log(`⏭️ Skipping outdated translation update (age: ${translationAge}ms)`);
+                return; // Don't process audio or status for skipped updates
             }
 
+            // Only setup audio and status for valid new translations
             // Setup audio playback
             if (data.audio_data && data.audio_data.length > 0) {
                 console.log('🎵 Setting up audio playback, data length:', data.audio_data.length);
