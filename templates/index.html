@@ -738,13 +738,26 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
     <script>
-        let socket = null;
-        let isRecording = false;
-        let currentMode = 'recording';
-        let audioContext = null;
-        let processor = null;
-        let stream = null;
-        let recordedSamples = [];
+            let socket = null;
+            let isRecording = false;
+            let currentMode = 'recording';
+            let audioContext = null;
+            let processor = null;
+            let stream = null;
+            let recordedSamples = [];
+    
+            // Helper function for base64 encoding - make globally accessible immediately
+            function base64EncodeArrayBuffer(arrayBuffer) {
+                let bytes = new Uint8Array(arrayBuffer);
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                return btoa(binary);
+            }
+    
+            // Make available globally immediately for audio processors
+            window.base64EncodeArrayBuffer = base64EncodeArrayBuffer;
 
         // Initialize WebSocket connection
         function initWebSocket() {
@@ -921,7 +934,7 @@
                         const audioData = new Float32Array(samples.length);
                         audioData.set(samples);
 
-                        const base64Audio = base64EncodeArrayBuffer(audioData.buffer);
+                        const base64Audio = window.base64EncodeArrayBuffer(audioData.buffer);
                         console.log(`📤 Sending streaming audio chunk: ${samples.length} samples (${base64Audio.length} chars)`);
 
                         // Send audio chunk to server
@@ -1104,7 +1117,7 @@
             document.getElementById('errorModal').style.display = 'none';
         }
 
-        // Helper function for base64 encoding
+        // Helper function for base64 encoding - make globally accessible
         function b64EncodeArrayBuffer(arrayBuffer) {
             let bytes = new Uint8Array(arrayBuffer);
             let binary = '';
@@ -1113,6 +1126,9 @@
             }
             return btoa(binary);
         }
+
+        // Also attach to window for processors/audio workers
+        window.b64EncodeArrayBuffer = b64EncodeArrayBuffer;
 
         // Responsive design adjustments
         window.addEventListener('resize', function() {

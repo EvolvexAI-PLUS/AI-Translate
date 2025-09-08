@@ -8,6 +8,9 @@ eventlet==0.36.1
 # AI Models
 google-generativeai
 elevenlabs
+google-cloud-speech>=2.25.0  # Google Speech-to-Text for real-time streaming
+nltk>=3.8.1  # Natural Language Toolkit for sentence detection
+websockets>=12.0  # WebSocket client for Google STT
 
 # Data Science / Audio Processing
 numpy==1.26.4

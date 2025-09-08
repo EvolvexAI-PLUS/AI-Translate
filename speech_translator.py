@@ -1,14 +1,19 @@
 import google.generativeai as genai
 import os
-import numpy as np
+import asyncio
 import threading
-from typing import Tuple
+import queue
+from typing import Tuple, Optional, Dict
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO, emit, disconnect
 import io
 import base64
 import wave
+import numpy as np
+
+# Import new modular services
+from speech_service import RealTimeTranslationSystem, SpeechToTextService, EnhancedSpeechTranslator
 try:
     # Import elevenlabs with proper error handling for Railway compatibility
     try:
@@ -147,17 +152,26 @@ class SpeechTranslator:
             print(f"Processing {len(wav_bytes)} bytes of WAV audio with Gemini...")
 
             # Use Gemini 2.5 Flash with multimodal capabilities
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            model = genai.GenerativeModel('gemini-2.5-flash')
 
             # Process audio with Gemini using direct bytes
-            prompt = """Analyze this audio file and provide:
-            1. The detected language (2-letter code)
-            2. The transcribed text
-            3. Translate to the opposite language (if Arabic, translate to English; if other languages, translate to Arabic)
+            prompt = """ABSOLUTELY CRITICAL TRANSLATION INSTRUCTIONS - FOLLOW EXACTLY:
 
-            Return ONLY a JSON object like this: {"language": "ar", "transcription": "...", "translation": "..."}
+FIRST: Detect the spoken language in this audio:
+- Set to "ar" if Arabic is detected
+- Set to "en" if English is detected
 
-            Do NOT add any explanation or additional text."""
+SECOND: Transcribe EXACTLY what was spoken (do not correct spelling)
+
+THIRD: TRANSLATE TO THE OPPOSITE LANGUAGE ONLY:
+- If language is "ar", translate the transcription to English
+- If language is "en", translate the transcription to Arabic
+- For any other language, translate to English
+
+FOURTH: Return ONLY a JSON object:
+{"language": "ar", "transcription": "...", "translation": "..."}
+
+IMPORTANT: The response must start with { and end with }. Do NOT add any prefixes like "AR" or language labels, explanations, prefixes, or extra text."""
 
             # Use Gemini's generate_content with raw audio data
             file_data = {
@@ -402,22 +416,89 @@ socketio = SocketIO(
     async_mode=None  # Use standard mode for Railway compatibility
 )
 
-# Global translator instance
+# Global translation system instance
+translation_system = None
+
+# Global fallback translator (for when new system fails)
 translator = None
 
 # Global streaming audio buffer for accumulating chunks
 streaming_buffer = []
 streaming_audio_data = b''
 streaming_last_processed = time.time()
-streaming_threshold_samples = 16000 * 2  # 2 seconds at 16kHz
+streaming_threshold_samples = 16000 * 1  # 1 second at 16kHz (reduced for faster response)
+
+# WebSocket transcription callback
+def on_transcription_result(transcript: str, is_final: bool, stability: float):
+    """Handle incoming transcription from Google STT"""
+    try:
+        current_time = time.time()
+        if is_final and transcript.strip():
+            print(f"📝 Final STT: '{transcript}' (stability: {stability:.2f})")
+
+            # Create translation task
+            asyncio.create_task(handle_translation(transcript))
+
+    except Exception as e:
+        print(f"❌ Transcription handling error: {e}")
+
+async def handle_translation(text: str):
+    """Handle translation of transcription results"""
+    if not translation_system:
+        return
+
+    try:
+        # Use the new synchronous translation method
+        if text and hasattr(translation_system, 'translate_text'):
+            target_lang = "en"  # Default translation logic
+            if text.startswith(('مرحبا', 'أهلاً', 'سلام', 'شلون', 'كيف')):  # Arabic-like text detection
+                target_lang = "en"
+
+            # Get translation synchronously
+            translated_text = translation_system.translate_text(text, "ar" if target_lang == "en" else "en")
+
+            if translated_text:
+                # Generate TTS
+                audio_bytes = translation_system._generate_tts(translated_text, target_lang)
+                audio_base64 = base64.b64encode(audio_bytes).decode() if audio_bytes else ""
+
+                # Determine languages
+                source_lang = "ar" if any(ord(char) > 127 for char in text) else "en"
+
+                # Send result back to client
+                emit('translation_result', {
+                    'original_language': source_lang,
+                    'transcribed_text': text,
+                    'translated_language': target_lang,
+                    'translated_text': translated_text,
+                    'audio_data': audio_base64,
+                    'streaming': True,
+                    'timestamp': time.time()
+                })
+                print(f"✅ Translation result: '{text}' ({source_lang}) → '{translated_text}' ({target_lang})")
+
+    except Exception as e:
+        print(f"❌ Translation handling error: {e}")
 
 try:
-    translator = SpeechTranslator()  # Now uses only Gemini 2.5 Flash for everything
-    print("🎙️ SpeechTranslator initialized successfully")
+    translation_system = RealTimeTranslationSystem()
+    success = translation_system.initialize()
+    if success:
+        print("🎯 Real-time Translation System initialized successfully")
+    else:
+        print("⚠️ Translation System initialization warning")
 except Exception as e:
-    print(f"⚠️ SpeechTranslator initialization failed: {e}")
-    print("🚨 This might cause API-related features to fail")
-    translator = None
+    print(f"⚠️ Translation System initialization failed: {e}")
+    print("🚨 Falling back to basic Gemini-only mode")
+    translation_system = None
+
+    # Initialize fallback translator
+    try:
+        translator = SpeechTranslator()  # Original translator for fallback
+        print("✅ Fallback Translator initialized")
+    except Exception as e2:
+        print(f"❌ Fallback translator initialization also failed: {e2}")
+        translator = None
 
 @app.route('/')
 def index():
@@ -454,28 +535,33 @@ def debug_tts():
 
 @app.route('/status')
 def get_status():
-    if translator is None:
+    if translation_system is None:
         return jsonify({
             'status': 'running',
             'models_loaded': {
+                'google_stt': 'not_initialized',
                 'gemini': 'not_initialized',
                 'elevenlabs': 'not_initialized'
             },
             'cache_size': 0,
+            'system_type': 'legacy',
             'initialization_error': True
         })
 
     return jsonify({
         'status': 'running',
+        'system_type': 'real_time_stt_translation',
         'models_loaded': {
-            'gemini': '2.5-flash' if translator.google_api_available else 'not_configured',
-            'elevenlabs': 'flash-v2.5' if translator.elevenlabs_api_available else 'not_configured',
+            'google_stt': 'initialized' if hasattr(translation_system, 'stt_service') else 'not_initialized',
+            'gemini': 'initialized' if hasattr(translation_system.translator, 'genai_client') and translation_system.translator.genai_client else 'not_configured',
+            'elevenlabs': 'flash-v2.5' if hasattr(translation_system.translator, 'elevenlabs_client') and translation_system.translator.elevenlabs_client else 'not_configured',
             'gtts': 'available' if GTTS_AVAILABLE else 'not_available'
         },
-        'cache_size': len(translator.translation_cache) if hasattr(translator, 'translation_cache') else 0,
+        'cache_size': 0,  # Will implement cache in Phase 2
         'debug_info': {
-            'elevenlabs_initialized': translator.elevenlabs_api_available,
-            'elevenlabs_client_exists': hasattr(translator, 'elevenlabs_client') and translator.elevenlabs_client is not None,
+            'system_running': translation_system.is_running,
+            'stt_available': hasattr(translation_system, 'stt_service'),
+            'translation_queue_size': 0,
             'py_version': __import__('sys').version.split()[0],
             'timestamp': __import__('time').time()
         }
@@ -503,13 +589,13 @@ def handle_start_streaming():
 
 @socketio.on('audio_chunk')
 def handle_audio_chunk(data):
-    """Handle real-time audio chunks from WebSocket client - accumulate and process"""
+    """Handle real-time audio chunks using new Google STT service"""
     global streaming_buffer, streaming_audio_data, streaming_last_processed, streaming_threshold_samples
 
     try:
-        # Check if translator is available
-        if translator is None:
-            emit('error', {'message': 'Translator not initialized. Check API keys.'})
+        # Check if translation system is available
+        if translation_system is None:
+            emit('error', {'message': 'Translation system not initialized. Check API keys.'})
             return
 
         # Decode the base64 audio data
@@ -528,29 +614,61 @@ def handle_audio_chunk(data):
 
             print(f"📊 Streaming buffer now: {len(streaming_buffer)} samples")
 
-            # Convert accumulated data to numpy array for processing
-            streaming_audio_data = np.array(streaming_buffer, dtype=np.float32)
-
             # Process only if we have enough data and it's been a while since last processing
             current_time = time.time()
             has_enough_data = len(streaming_buffer) >= streaming_threshold_samples
             time_since_last_processed = current_time - streaming_last_processed
 
             if has_enough_data and time_since_last_processed > 1.5:  # Process every 1.5 seconds
-                print(f"📊 Processing accumulated streaming audio: {len(streaming_audio_data)} samples")
+                print(f"📊 Processing accumulated streaming audio: {len(streaming_buffer)} samples")
 
-                # Process with Gemini for transcription and translation
-                detected_lang, transcribed_text, translated_text = translator.process_audio_with_gemini(streaming_audio_data)
+                # Convert to numpy array for processing
+                streaming_audio_data = np.array(streaming_buffer, dtype=np.float32)
 
-                # Generate TTS if we have translation
-                audio_base64 = ""
-                if translated_text:
-                    print(f"🎤 Generating TTS for streaming translation: '{translated_text}'")
-                    audio_bytes = translator._generate_tts(translated_text, "ar" if detected_lang == "en" else "en")
-                    audio_base64 = base64.b64encode(audio_bytes).decode()
+                # Use new unified pipeline: STT + Translation + TTS
+                if translation_system:
+                    print("🎯 Running unified STT → Translation → TTS pipeline")
+                    transcript, translated_text, source_lang, target_lang = translation_system.transcribe_and_translate(streaming_audio_data)
 
-                # Send real-time result back to client via WebSocket
-                if transcribed_text or translated_text:
+                    if transcript or translated_text:
+                        # Generate TTS if we have translation
+                        audio_base64 = ""
+                        if translated_text and hasattr(translation_system, '_generate_tts'):
+                            audio_bytes = translation_system._generate_tts(translated_text, target_lang)
+                            if audio_bytes:
+                                audio_base64 = base64.b64encode(audio_bytes).decode()
+
+                        # Send complete result back to client
+                        emit('translation_result', {
+                            'original_language': source_lang,
+                            'transcribed_text': transcript,
+                            'translated_language': target_lang,
+                            'translated_text': translated_text,
+                            'audio_data': audio_base64,
+                            'streaming': True,
+                            'timestamp': current_time
+                        })
+
+                        print(f"✅ Pipeline result: '{transcript}' ({source_lang}) → '{translated_text}' ({target_lang})")
+                    else:
+                        # Send status update if no result
+                        emit('streaming_status', {
+                            'message': 'No speech detected or processing failed',
+                            'buffer_size': len(streaming_buffer),
+                            'timestamp': current_time
+                        })
+
+                else:
+                    # Fallback to original Gemini processing if new system not available
+                    print("⚠️ New system not available, using fallback")
+                    detected_lang, transcribed_text, translated_text = translator.process_audio_with_gemini(streaming_audio_data)
+
+                    # Generate TTS and send result
+                    audio_base64 = ""
+                    if translated_text:
+                        audio_bytes = translator._generate_tts(translated_text, "ar" if detected_lang == "en" else "en")
+                        audio_base64 = base64.b64encode(audio_bytes).decode()
+
                     emit('translation_result', {
                         'original_language': detected_lang,
                         'transcribed_text': transcribed_text,
@@ -558,15 +676,12 @@ def handle_audio_chunk(data):
                         'translated_text': translated_text,
                         'audio_data': audio_base64,
                         'streaming': True,
-                        'timestamp': time.time()
+                        'timestamp': current_time
                     })
-
-                    print(f"✅ Streaming result sent: {transcribed_text} → {translated_text}")
 
                 # Reset for next processing window
                 streaming_last_processed = current_time
                 streaming_buffer = []
-                streaming_audio_data = b''
 
             else:
                 # Send status update indicating buffering
@@ -575,7 +690,7 @@ def handle_audio_chunk(data):
                     emit('streaming_status', {
                         'message': f'Buffering audio... {buffer_seconds:.1f}s recorded',
                         'buffer_size': len(streaming_buffer),
-                        'timestamp': time.time()
+                        'timestamp': current_time
                     })
 
     except Exception as e:
@@ -589,35 +704,30 @@ def handle_stop_streaming():
     print(f'Final audio buffer size: {len(streaming_buffer)} samples')
 
     # Process any remaining audio before stopping
-    if len(streaming_buffer) > 0:
+    if len(streaming_buffer) > 0 and translation_system:
         try:
-            # Convert accumulated data to numpy array
-            streaming_audio_data = np.array(streaming_buffer, dtype=np.float32)
-            print(f"📊 Processing final streaming audio: {len(streaming_audio_data)} samples")
+            print(f"📊 Processing final streaming audio: {len(streaming_buffer)} samples")
 
-            # Process with Gemini
-            detected_lang, transcribed_text, translated_text = translator.process_audio_with_gemini(streaming_audio_data)
+            # Add final transcription
+            translation_system.translator.add_transcription(
+                text="",
+                is_final=True,
+                source_lang="ar"
+            )
 
-            # Generate TTS if we have translation
-            audio_base64 = ""
-            if translated_text:
-                audio_bytes = translator._generate_tts(translated_text, "ar" if detected_lang == "en" else "en")
-                audio_base64 = base64.b64encode(audio_bytes).decode()
-
-            # Send final result
-            emit('translation_result', {
-                'original_language': detected_lang,
-                'transcribed_text': transcribed_text,
-                'translated_language': "ar" if detected_lang == "en" else "en",
-                'translated_text': translated_text,
-                'audio_data': audio_base64,
-                'streaming': False,
-                'final_result': True,
+            # Send final status
+            emit('streaming_status', {
+                'message': 'Processing final audio chunk...',
+                'final_processing': True,
                 'timestamp': time.time()
             })
 
         except Exception as e:
             print(f"Error processing final streaming audio: {e}")
+
+    # Stop the translation system
+    if translation_system:
+        translation_system.stop_system()
 
     # Reset streaming buffers
     streaming_buffer = []
@@ -629,10 +739,10 @@ def handle_stop_streaming():
 @app.route('/translate', methods=['POST'])
 def translate_audio():
     try:
-        # Check if translator is initialized
-        if translator is None:
+        # Check if translation system is initialized
+        if translation_system is None:
             return jsonify({
-                'error': 'Translator not initialized. App is starting up.',
+                'error': 'Translation system not initialized. App is starting up.',
                 'initialization_error': True
             }), 503
 
@@ -674,45 +784,39 @@ def translate_audio():
 
         print(f"Processing audio with {len(audio_np)} samples...")
 
-        # Process audio directly with Gemini (transcription + translation)
-        if not translator.google_api_available:
+        # Use new unified pipeline: STT → Translation → TTS
+        if not translation_system.is_running:
             return jsonify({
-                'error': 'Google Gemini API not configured. Please set GOOGLE_API_KEY in Railway environment variables.',
-                'setup_instructions': 'Add GOOGLE_API_KEY to Railway project variables. Get key from https://aistudio.google.com/app/apikey'
+                'error': 'Translation system not running. Check Google Cloud credentials.',
+                'setup_instructions': 'Add GOOGLE_APPLICATION_CREDENTIALS in .env pointing to your Google service account JSON'
             }), 500
 
-        detected_lang, transcribed_text, translated_text = translator.process_audio_with_gemini(audio_np)
+        transcript, translated_text, source_lang, target_lang = translation_system.transcribe_and_translate(audio_np)
 
-        if not transcribed_text:
+        if not transcript:
             return jsonify({'error': 'No speech detected'}), 200
-
-        # Determine target language based on detected language
-        translated_lang = "en" if detected_lang == "ar" else "ar"
 
         # Generate high-quality audio with TTS (ElevenLabs + gTTS fallback)
         if translated_text:
-            audio_bytes = translator._generate_tts(translated_text, translated_lang)
+            audio_bytes = translation_system._generate_tts(translated_text, target_lang)
             if len(audio_bytes) == 0:
-                print("⚠️ ElevenLabs TTS returned empty audio data")
+                print("⚠️ TTS returned empty audio data")
             else:
                 print(f"📦 Generated audio: {len(audio_bytes)} bytes")
         else:
-            audio_bytes = b''  # Empty audio if TTS not available
-            if not translator.elevenlabs_api_available:
-                print("❌ TTS not available - ElevenLabs API not configured")
-            else:
-                print("ℹ️ No translated text to generate audio for")
+            audio_bytes = b''
+            print("ℹ️ No translated text to generate audio for")
 
         # Convert to base64 for client
         audio_base64 = base64.b64encode(audio_bytes).decode()
         print(f"🔧 Base64 audio length: {len(audio_base64)} characters")
 
-        print(f"✅ Translated: '{transcribed_text}' → '{translated_text}'")
+        print(f"✅ Translated: '{transcript}' ({source_lang}) → '{translated_text}' ({target_lang})")
 
         return jsonify({
-            'original_language': detected_lang,
-            'transcribed_text': transcribed_text,
-            'translated_language': translated_lang,
+            'original_language': source_lang,
+            'transcribed_text': transcript,
+            'translated_language': target_lang,
             'translated_text': translated_text,
             'audio_data': audio_base64
         })
