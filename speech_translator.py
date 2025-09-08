@@ -628,7 +628,11 @@ def handle_audio_chunk(data):
                 # Use new unified pipeline: STT + Translation + TTS
                 if translation_system:
                     print("🎯 Running unified STT → Translation → TTS pipeline")
+                    print(f"🎯 Translation system status: running={getattr(translation_system, 'is_running', 'unknown')}")
+                    print(f"🎯 STT client available: {getattr(getattr(translation_system, 'stt_service', None), 'client', None) is not None}")
+                    print(f"🎯 Gemini translator available: {getattr(translation_system, 'translator', None) is not None}")
                     transcript, translated_text, source_lang, target_lang = translation_system.transcribe_and_translate(streaming_audio_data)
+                    print(f"🎯 Pipeline result → transcript: '{transcript}', translated: '{translated_text}', lang: {source_lang}→{target_lang}")
 
                     if transcript or translated_text:
                         # Generate TTS if we have translation

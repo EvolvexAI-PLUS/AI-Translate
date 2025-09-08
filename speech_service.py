@@ -84,7 +84,7 @@ class SpeechToTextService:
                 self.client = speech.SpeechClient()
                 print("✅ Google STT client initialized (credentials auto-detected)")
 
-            # Configure recognition settings
+            # Configure recognition settings - IMPROVED SENSITIVITY
             self.recognition_config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
                 sample_rate_hertz=self.sample_rate,
@@ -92,8 +92,13 @@ class SpeechToTextService:
                 alternative_language_codes=["en-US"],  # Fallback English
                 enable_automatic_punctuation=True,
                 enable_word_time_offsets=True,
+                # ADD MORE SENSITIVE SETTINGS
+                use_enhanced=True,  # Use enhanced models
+                enable_spoken_punctuation=True,
+                model="latest_long"  # Use latest long-form model
             )
-            print("✅ Google STT client initialized with Arabic/English support")
+            print("✅ Google STT client initialized with Arabic/English support (enhanced model)")
+            print("🔍 STT Debug: Using enhanced configuration for better speech detection")
         except Exception as e:
             print(f"❌ Failed to initialize Google STT: {e}")
             print("📋 Environment variables check:")
@@ -128,31 +133,68 @@ class SpeechToTextService:
         """
         try:
             if not self.client or audio_np is None or len(audio_np) == 0:
+                print("❌ STT Error: No client or empty audio")
                 return "", ""
+
+            if len(audio_np) < 1600:  # Less than 100ms
+                print(f"❌ STT Error: Audio too short: {len(audio_np)} samples ({len(audio_np)/16000:.1f}s)")
+                return "", ""
+
+            # Check audio volume/levels
+            audio_min = np.min(np.abs(audio_np))
+            audio_max = np.max(np.abs(audio_np))
+            audio_mean = np.mean(np.abs(audio_np))
+
+            print(f"🔊 Audio stats: samples={len(audio_np)}, min={audio_min:.6f}, max={audio_max:.6f}, mean={audio_mean:.6f}")
+
+            # Check for silent audio
+            if audio_mean < 0.005:  # Very low volume threshold
+                print("🤫 Audio appears to be silent or very low volume")
+            elif audio_max > 0.001:  # Some signal detected
+                print(f"📈 Audio signal detected: max amplitude {audio_max:.6f}")
 
             # Convert to WAV format
             wav_bytes = self.convert_audio_to_wav(audio_np)
-            if not wav_bytes:
+            if not wav_bytes or len(wav_bytes) < 44:  # WAV header is 44 bytes
+                print("❌ STT Error: WAV conversion failed or too small")
                 return "", ""
+
+            print(f"🔄 WAV generated: {len(wav_bytes)} bytes")
 
             # Create audio content
             audio = speech.RecognitionAudio(content=wav_bytes)
 
+            print("🌐 Sending to Google STT API...")
+
             # Perform recognition
             response = self.client.recognize(config=self.recognition_config, audio=audio)
+
+            print(f"📨 Google STT response received: has_results={bool(response.results)}")
 
             if response.results and response.results[0].alternatives:
                 result = response.results[0]
                 transcript = result.alternatives[0].transcript.strip()
                 language = result.language_code
 
-                print(f"🎯 Google STT: '{transcript}' (language: {language})")
+                print(f"🎯 Google STT SUCCESS: '{transcript}' (language: {language})")
+                print(f"📊 Alternative count: {len(result.alternatives)}")
+                if len(result.alternatives) > 1:
+                    print(f"📊 Alternative 2: '{result.alternatives[1].transcript}' (confidence: {result.alternatives[1].confidence:.2f})")
+
                 return transcript, language
             else:
+                print("❌ Google STT returned no results")
+                if response.results:
+                    print(f"❌ First result has no alternatives: {len(response.results[0].alternatives)} alternatives")
+                else:
+                    print("❌ No results at all from Google STT")
                 return "", ""
 
         except Exception as e:
-            print(f"❌ Google STT error: {e}")
+            print(f"❌ Google STT Exception: {e}")
+            print(f"❌ Exception type: {type(e).__name__}")
+            import traceback
+            traceback.print_exc()
             return "", ""
 
 class EnhancedSpeechTranslator:
@@ -341,13 +383,19 @@ class RealTimeTranslationSystem:
         Returns: (transcribed_text, translated_text, source_lang, target_lang)
         """
         if not self.is_running:
+            print("❌ Translation system is not running!")
             return "", "", "", ""
 
         try:
+            print("📊 Audio chunk received: {} samples ({:.1f}s)".format(len(audio_np), len(audio_np)/16000))
             # Step 1: Transcribe using Google STT
+            print("🎤 Step 1: Running STT transcription...")
             transcript, source_lang = self.stt_service.transcribe_audio_chunk(audio_np)
 
+            print(f"🎙️ STT result: transcript='{transcript}' (detected_lang='{source_lang}')")
+
             if not transcript:
+                print("⚠️ No transcript detected - returning empty")
                 return "", "", "", ""
 
             # Step 2: Translate using Gemini (handle Arabic dialects)
