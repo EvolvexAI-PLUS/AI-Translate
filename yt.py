@@ -2,7 +2,7 @@ import asyncio
 from google import genai
 import time
 
-client = genai.Client(api_key='AIzaSyCpjoxh8iLYfkSTpEcqo5k2Uw-zgl5hXKg')
+client = genai.Client(api_key='your-key-here')
 model = "gemini-live-2.5-flash-preview"
 config = {"response_modalities": ["TEXT"]}
 
