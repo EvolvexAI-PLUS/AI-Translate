@@ -1,13 +1,13 @@
 {
   "type": "service_account",
   "project_id": "plucky-balm-439119-r8",
-  "private_key_id": "2d165a01cb6dca060c34c21df9874989b591bf74",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC88XqynpClLE7F\ntqchMaj98amoK1g7d5LiRmtofZrcbcOSBTSn92FzMDpyS9dOZMKMGto+jQYGNVUA\n+PlCu8gohRzMx3KhCHRc8t1SSZq05OTMUhsgJi0y0L0f703cDqN/LZx8HUe9CiA+\nz98sksNAMGUyPMpbNNeWmd8CYN7NA/EAHCb2Qe/Cl1lFGsi3YTDLF4tR/URmOB32\nEb56GFLOqUpicLE8CiiAru+Y5QiVXrHMCkK3ymG3l0amVg29vvMXEIXPX6NPNduv\nWr5yy62pGf1qFejdKyxzdZ0xwUSdu/chGRsbzqd4yPmITeIgVe7ax3clnGyS2Wrk\nBmtBIXCdAgMBAAECggEADUpnOR1SS2wcdmfsxbb6jjJrnrq90CEPIf+WGpmLRSor\ncaAQHiiWoEWqNtQC5y7LSJOy+mdtHw6tVg4tanZPFBqY9gapl45CsS8cRmeLDGJ1\nfbHg2pgU4dgxFYf90BbvhUiuE0T0AOYvcnuo1TfVqDQ/ShNgoJ3M9HkKaN5rjbw0\nNrIqFtPD6WRNaMN3wqkXgdpvjwiwYL9+gYs92upjznguSI3Zly85E0w3+tihfHMq\n6GU0QRmDIUF38DoIok/XTqb7kHHNLXUVFWfndi1IHQ+YS+T7wDbvD/JfLw+iebu0\nr5tZjKNMp6BryCH872SPSt1QIfsvbvNJIv8amMoRAQKBgQDs9xz4AvqjTd9bLC+v\neMDlPWzXptD2zu+2YyzNnjRuGSLgWseX59Mx/htKl68D8r2TT54BlOLiaKN21jFT\nY7o6CbFcCCGyPJZQu7432RYlex1VMqIs68IdJCJSMGJ6AqQaoV3F18F28SP2Kmml\nbUr185qG3Yq3CMJOjTGp5mUb4QKBgQDMHtru7EolL7yc26yKhYxLY8yb0c8naqSE\nZHvooa3834HuCvwqfHxAcvTA7vZ4vz9O7wiYTcmbzxXz7OkKE1smpNhujttzKydX\nuXh+RCY+oxA9Zwbphfl7Uz52IRa8whDzv9AmEJUPDGqEDtPZ/7ROHsjQx2KYbvN0\nZXpfZyNMPQKBgQDV/LmORbJssi/XN2nAfb1Dxlp5y8y8dFcITzrwW8NhARX7oD7J\nsLGJXbzreVq0qAoF80nuh7LzXibvc7GLam2LZ6FgSH+VYx0ivsehy0oygqEUhOrq\nwePDSRQtQEBNigEDg2EY/iNY853T+Kz6lF2zCU8sJvfTHffJ07tbgBEiQQKBgEzE\nrgJ9y8UAlydHVzUh1QnlluZjmk1wxj8kq5VqeU1JokwsxXoVJ4X1tid5uCjhhKXj\nMJBXcSOwVslOqLapYPa/uMab490Etd9AWhji+J9GJK1zOh5JzPKc9DjpaOvE8Ss7\nUMWAJw9p1AWmrfanPODEozIiSuqZj+aO499NovDhAoGAZE2yDpA+8TFac6upqh9f\nzqScFq0j7SkKeb7+TEEopy61qBlLRyQL7LN0IXHuzfMXwbQbvHjntJV2vlTs358k\nV3RwzUzF70+q/M21UPSJy6vo9z1thTaYKFupw6DK1eIPqCQrx6SFn0pdjHkO3cAc\n11x0U59G2uMvKjnjTkOT5kA=\n-----END PRIVATE KEY-----\n",
-  "client_email": "cloud-speech-client@plucky-balm-439119-r8.iam.gserviceaccount.com",
-  "client_id": "114421791537046164672",
+  "private_key_id": "",
+  "private_key": "-----BEGIN PRIVATE KEY-----\\n-----END PRIVATE KEY-----\n",
+  "client_email": "",
+  "client_id": "",
   "auth_uri": "https://accounts.google.com/o/oauth2/auth",
   "token_uri": "https://oauth2.googleapis.com/token",
   "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/cloud-speech-client%40plucky-balm-439119-r8.iam.gserviceaccount.com",
+  "client_x509_cert_url": "",
   "universe_domain": "googleapis.com"
 }
